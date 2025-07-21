@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { HiClock, HiInformationCircle, HiSave, HiEye, HiRefresh, HiTrash } from 'react-icons/hi';
 import { useAuth } from '../../contexts/AuthContext';
 
-const BASE_URL = 'http://localhost:5000';
+const BASE_URL = 'https://api-inventory.isavralabel.com/api/inventory-amanah';
 
 const JITCalculations = () => {
   const { user } = useAuth();
@@ -37,7 +37,7 @@ const JITCalculations = () => {
 
   const fetchItems = async () => {
     try {
-      const response = await fetch(`${BASE_URL}/api/items`);
+      const response = await fetch(`${BASE_URL}/items`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
