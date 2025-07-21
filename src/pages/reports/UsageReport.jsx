@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { HiDownload, HiPrinter, HiSearch, HiTrendingDown, HiTrendingUp } from 'react-icons/hi';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { useUsageReports, useDailyUsage, useCategoryUsage, useCategories } from '../../hooks/useUsageReports';
+import { printReport, exportToExcel, formatUsageDataForExcel } from '../../utils/reportUtils';
 
 const UsageReport = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -73,6 +74,15 @@ const UsageReport = () => {
   const totalUsage = filteredData.reduce((sum, item) => sum + item.totalUsage, 0);
   const averageDaily = totalUsage / 30; // Assuming 30 days in a month
 
+  const handlePrint = () => {
+    printReport('Laporan Pemakaian');
+  };
+
+  const handleExport = () => {
+    const excelData = formatUsageDataForExcel(filteredData);
+    exportToExcel(excelData, 'laporan_pemakaian', 'Data Pemakaian');
+  };
+
   // Show loading state
   if (usageLoading || dailyLoading || categoryLoading) {
     return (
@@ -127,11 +137,11 @@ const UsageReport = () => {
           <p className="text-gray-600 mt-1">Laporan pemakaian barang dan analisis tren</p>
         </div>
         <div className="flex space-x-2">
-          <button className="btn-outline flex items-center">
+          <button onClick={handlePrint} className="btn-outline flex items-center">
             <HiPrinter className="h-5 w-5 mr-2" />
             Print
           </button>
-          <button className="btn-primary flex items-center">
+          <button onClick={handleExport} className="btn-primary flex items-center">
             <HiDownload className="h-5 w-5 mr-2" />
             Export
           </button>

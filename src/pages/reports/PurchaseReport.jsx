@@ -12,6 +12,7 @@ import {
   Line,
 } from "recharts";
 import axios from "axios";
+import { printReport, exportToExcel, formatPurchaseDataForExcel } from "../../utils/reportUtils";
 
 const PurchaseReport = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -126,6 +127,15 @@ const PurchaseReport = () => {
     (purchase) => purchase.status === "pending"
   ).length;
 
+  const handlePrint = () => {
+    printReport('Laporan Pembelian');
+  };
+
+  const handleExport = () => {
+    const excelData = formatPurchaseDataForExcel(filteredData);
+    exportToExcel(excelData, 'laporan_pembelian', 'Data Pembelian');
+  };
+
   if (loading) {
     return (
       <div className="p-8 text-center text-gray-500">
@@ -150,11 +160,11 @@ const PurchaseReport = () => {
           </p>
         </div>
         <div className="flex space-x-2">
-          <button className="btn-outline flex items-center">
+          <button onClick={handlePrint} className="btn-outline flex items-center">
             <HiPrinter className="h-5 w-5 mr-2" />
             Print
           </button>
-          <button className="btn-primary flex items-center">
+          <button onClick={handleExport} className="btn-primary flex items-center">
             <HiDownload className="h-5 w-5 mr-2" />
             Export
           </button>

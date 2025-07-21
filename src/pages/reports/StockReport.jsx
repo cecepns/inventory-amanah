@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { HiDownload, HiPrinter, HiSearch, HiExclamationCircle } from 'react-icons/hi';
+import { printReport, exportToExcel, formatStockDataForExcel } from '../../utils/reportUtils';
 
 const StockReport = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -87,6 +88,15 @@ const StockReport = () => {
   const totalValue = filteredData.reduce((sum, item) => sum + item.totalValue, 0);
   const lowStockItems = filteredData.filter(item => item.status === 'low').length;
 
+  const handlePrint = () => {
+    printReport('Laporan Stok');
+  };
+
+  const handleExport = () => {
+    const excelData = formatStockDataForExcel(filteredData);
+    exportToExcel(excelData, 'laporan_stok', 'Data Stok');
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -96,11 +106,11 @@ const StockReport = () => {
           <p className="text-gray-600 mt-1">Laporan status stok barang secara real-time</p>
         </div>
         <div className="flex space-x-2">
-          <button className="btn-outline flex items-center">
+          <button onClick={handlePrint} className="btn-outline flex items-center">
             <HiPrinter className="h-5 w-5 mr-2" />
             Print
           </button>
-          <button className="btn-primary flex items-center">
+          <button onClick={handleExport} className="btn-primary flex items-center">
             <HiDownload className="h-5 w-5 mr-2" />
             Export
           </button>
