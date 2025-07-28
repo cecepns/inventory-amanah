@@ -422,7 +422,7 @@ const Receipts = () => {
       {/* Form Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-screen overflow-y-auto">
             <h3 className="text-lg font-semibold mb-4">
               {editingReceipt ? 'Edit Penerimaan' : 'Buat Penerimaan Baru'}
             </h3>
@@ -661,7 +661,7 @@ const Receipts = () => {
       {/* Modal View Detail Receipt */}
       {viewingReceipt && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-lg relative">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-screen overflow-y-auto">
             <button
               className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
               onClick={() => { setViewingReceipt(null); setViewingDetail(null); }}
@@ -766,7 +766,10 @@ const Receipts = () => {
             <div className="flex justify-between border-t pt-3">
               <span className="text-gray-600">Total Nilai:</span>
               <span className="font-semibold">
-                {formatCurrency(receipts.reduce((sum, receipt) => sum + (receipt.total_amount || 0), 0))}
+                {formatCurrency(receipts.reduce((sum, receipt) => {
+                  const amount = parseFloat(receipt.total_amount) || 0;
+                  return sum + amount;
+                }, 0))}
               </span>
             </div>
           </div>

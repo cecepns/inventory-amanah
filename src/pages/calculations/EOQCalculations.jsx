@@ -51,7 +51,7 @@ const EOQCalculations = () => {
 
   const fetchHistoricalData = async (itemId) => {
     try {
-      const response = await fetch(`${BASE_URL}/api/items/${itemId}/historical-data?months=12`);
+      const response = await fetch(`${BASE_URL}/items/${itemId}/historical-data?months=12`);
       const data = await response.json();
       setHistoricalData(data);
       
@@ -69,7 +69,7 @@ const EOQCalculations = () => {
 
   const fetchCalculationHistory = async (itemId) => {
     try {
-      const response = await fetch(`${BASE_URL}/api/eoq_calculations?item_id=${itemId}`);
+      const response = await fetch(`${BASE_URL}/eoq_calculations?item_id=${itemId}`);
       const data = await response.json();
       setCalculationHistory(data);
     } catch (error) {
@@ -129,7 +129,7 @@ const EOQCalculations = () => {
 
     setSaveLoading(true);
     try {
-      const response = await fetch(`${BASE_URL}/api/eoq_calculations`, {
+      const response = await fetch(`${BASE_URL}/eoq_calculations`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -165,7 +165,7 @@ const EOQCalculations = () => {
     if (!confirm('Yakin ingin menghapus perhitungan ini?')) return;
 
     try {
-      const response = await fetch(`${BASE_URL}/api/eoq_calculations/${calculationId}`, {
+      const response = await fetch(`${BASE_URL}/eoq_calculations/${calculationId}`, {
         method: 'DELETE',
       });
 

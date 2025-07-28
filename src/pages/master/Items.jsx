@@ -8,9 +8,21 @@ const Items = () => {
   const [units, setUnits] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [message, setMessage] = useState({ type: '', text: '' });
+
+  // Clear message after 5 seconds
+  useEffect(() => {
+    if (message.text) {
+      const timer = setTimeout(() => {
+        setMessage({ type: '', text: '' });
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [message.text]);
   const [formData, setFormData] = useState({
     code: '',
     name: '',
@@ -47,38 +59,91 @@ const Items = () => {
       setLoading(false);
     } catch (error) {
       console.error('Error fetching data:', error);
+      setMessage({ type: 'error', text: 'Gagal memuat data: ' + error.message });
       setLoading(false);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitting(true);
+    setMessage({ type: '', text: '' });
+    
     try {
       if (editingItem) {
-        await axios.put(`https://api-inventory.isavralabel.com/api/inventory-amanah/items/${editingItem.id}`, formData);
+        // Update existing item
+        const response = await axios.put(
+          `https://api-inventory.isavralabel.com/api/inventory-amanah/items/${editingItem.id}`, 
+          formData
+        );
+        
+        if (response.status === 200) {
+          // Update the specific item in the local state instead of refetching all
+          setItems(prevItems => 
+            prevItems.map(item => 
+              item.id === editingItem.id 
+                ? { ...item, ...formData }
+                : item
+            )
+          );
+          
+          setMessage({ type: 'success', text: 'Barang berhasil diperbarui!' });
+          setShowModal(false);
+          setEditingItem(null);
+          setFormData({
+            code: '',
+            name: '',
+            description: '',
+            category_id: '',
+            unit_id: '',
+            supplier_id: '',
+            price: '',
+            cost: '',
+            current_stock: '',
+            min_stock: '',
+            max_stock: '',
+            location: '',
+            status: 'active'
+          });
+        }
       } else {
-        await axios.post('https://api-inventory.isavralabel.com/api/inventory-amanah/items', formData);
+        // Create new item
+        const response = await axios.post(
+          'https://api-inventory.isavralabel.com/api/inventory-amanah/items', 
+          formData
+        );
+        
+        if (response.status === 200 || response.status === 201) {
+          // Add the new item to the local state
+          setItems(prevItems => [...prevItems, response.data]);
+          
+          setMessage({ type: 'success', text: 'Barang berhasil ditambahkan!' });
+          setShowModal(false);
+          setFormData({
+            code: '',
+            name: '',
+            description: '',
+            category_id: '',
+            unit_id: '',
+            supplier_id: '',
+            price: '',
+            cost: '',
+            current_stock: '',
+            min_stock: '',
+            max_stock: '',
+            location: '',
+            status: 'active'
+          });
+        }
       }
-      fetchData();
-      setShowModal(false);
-      setEditingItem(null);
-      setFormData({
-        code: '',
-        name: '',
-        description: '',
-        category_id: '',
-        unit_id: '',
-        supplier_id: '',
-        price: '',
-        cost: '',
-        current_stock: '',
-        min_stock: '',
-        max_stock: '',
-        location: '',
-        status: 'active'
-      });
     } catch (error) {
       console.error('Error saving item:', error);
+      setMessage({ 
+        type: 'error', 
+        text: 'Gagal menyimpan barang: ' + (error.response?.data?.error || error.message) 
+      });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -105,10 +170,19 @@ const Items = () => {
   const handleDelete = async (id) => {
     if (window.confirm('Apakah Anda yakin ingin menghapus item ini?')) {
       try {
-        await axios.delete(`https://api-inventory.isavralabel.com/api/inventory-amanah/items/${id}`);
-        fetchData();
+        const response = await axios.delete(`https://api-inventory.isavralabel.com/api/inventory-amanah/items/${id}`);
+        
+        if (response.status === 200) {
+          // Remove the specific item from local state instead of refetching all
+          setItems(prevItems => prevItems.filter(item => item.id !== id));
+          setMessage({ type: 'success', text: 'Barang berhasil dihapus!' });
+        }
       } catch (error) {
         console.error('Error deleting item:', error);
+        setMessage({ 
+          type: 'error', 
+          text: 'Gagal menghapus barang: ' + (error.response?.data?.error || error.message) 
+        });
       }
     }
   };
@@ -129,6 +203,17 @@ const Items = () => {
 
   return (
     <div className="space-y-6">
+      {/* Message Display */}
+      {message.text && (
+        <div className={`p-4 rounded-md ${
+          message.type === 'success' 
+            ? 'bg-green-50 border border-green-200 text-green-800' 
+            : 'bg-red-50 border border-red-200 text-red-800'
+        }`}>
+          {message.text}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -490,11 +575,16 @@ const Items = () => {
                       });
                     }}
                     className="btn-outline"
+                    disabled={submitting}
                   >
                     Batal
                   </button>
-                  <button type="submit" className="btn-primary">
-                    {editingItem ? 'Update' : 'Simpan'}
+                  <button 
+                    type="submit" 
+                    className="btn-primary"
+                    disabled={submitting}
+                  >
+                    {submitting ? 'Menyimpan...' : (editingItem ? 'Update' : 'Simpan')}
                   </button>
                 </div>
               </form>

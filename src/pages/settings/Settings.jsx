@@ -89,7 +89,7 @@ const Settings = () => {
         throw new Error('Token autentikasi tidak ditemukan. Silakan login kembali.');
       }
       
-      const response = await fetch('http://localhost:5000/settings', {
+      const response = await fetch('https://api-inventory.isavralabel.com/api/inventory-amanah/settings', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
