@@ -113,16 +113,8 @@ const StockMovements = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Convert quantity based on movement type
-    let finalQuantity = parseInt(formData.quantity);
-    if (formData.movement_type === 'out') {
-      finalQuantity = -Math.abs(finalQuantity); // Ensure negative for out movements
-    } else if (formData.movement_type === 'adjustment') {
-      // For adjustments, quantity can be positive or negative
-      finalQuantity = parseInt(formData.quantity);
-    } else {
-      finalQuantity = Math.abs(finalQuantity); // Ensure positive for in movements
-    }
+    // Send quantity as-is, let backend handle the logic
+    const finalQuantity = parseInt(formData.quantity);
     
     await createStockMovement({
       ...formData,

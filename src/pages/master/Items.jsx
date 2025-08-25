@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { HiPlus, HiPencilAlt, HiTrash, HiSearch, HiExclamationCircle } from 'react-icons/hi';
 import axios from 'axios';
 

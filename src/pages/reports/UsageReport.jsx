@@ -24,6 +24,7 @@ const UsageReport = () => {
   const categoryUsageData = categoryData;
 
   const formatDate = (dateString) => {
+    if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('id-ID', {
       year: 'numeric',
       month: 'short',
@@ -71,7 +72,7 @@ const UsageReport = () => {
     return matchesSearch && matchesCategory;
   });
 
-  const totalUsage = filteredData.reduce((sum, item) => sum + item.totalUsage, 0);
+  const totalUsage = filteredData.reduce((sum, item) => sum + (parseInt(item.totalUsage) || 0), 0);
   const averageDaily = totalUsage / 30; // Assuming 30 days in a month
 
   const handlePrint = () => {
@@ -305,10 +306,10 @@ const UsageReport = () => {
                       <div className="text-sm text-gray-900">{item.category}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{item.totalUsage}</div>
+                      <div className="text-sm font-medium text-gray-900">{parseInt(item.totalUsage) || 0}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{item.averageDaily}</div>
+                      <div className="text-sm text-gray-900">{parseFloat(item.averageDaily) || 0}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
@@ -333,7 +334,7 @@ const UsageReport = () => {
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Barang Paling Banyak Digunakan</h3>
         <div className="space-y-3">
-          {[...filteredData].sort((a, b) => b.totalUsage - a.totalUsage).slice(0, 5).map((item, index) => (
+          {[...filteredData].sort((a, b) => (parseInt(b.totalUsage) || 0) - (parseInt(a.totalUsage) || 0)).slice(0, 5).map((item, index) => (
             <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
               <div className="flex items-center">
                 <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center mr-3">
@@ -345,7 +346,7 @@ const UsageReport = () => {
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-sm font-bold text-gray-900">{item.totalUsage}</div>
+                <div className="text-sm font-bold text-gray-900">{parseInt(item.totalUsage) || 0}</div>
                 <div className="text-xs text-gray-500">unit</div>
               </div>
             </div>

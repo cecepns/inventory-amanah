@@ -61,6 +61,14 @@ const PurchaseReport = () => {
   }, []);
 
   const formatCurrency = (value) => {
+    // Handle NaN, null, undefined values
+    if (value === null || value === undefined || isNaN(value)) {
+      return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        minimumFractionDigits: 0,
+      }).format(0);
+    }
     return new Intl.NumberFormat("id-ID", {
       style: "currency",
       currency: "IDR",
@@ -117,7 +125,12 @@ const PurchaseReport = () => {
   });
 
   const totalAmount = filteredData.reduce(
-    (sum, purchase) => sum + (purchase.total_amount || 0),
+    (sum, purchase) => {
+      const amount = purchase.total_amount;
+      // Handle different data types: string, number, null, undefined
+      const numericAmount = amount ? parseFloat(amount) || 0 : 0;
+      return sum + numericAmount;
+    },
     0
   );
   const completedOrders = filteredData.filter(
@@ -379,7 +392,11 @@ const PurchaseReport = () => {
               (p) => p.supplier_name === supplier
             );
             const totalSupplierAmount = supplierOrders.reduce(
-              (sum, order) => sum + (order.total_amount || 0),
+              (sum, order) => {
+                const amount = order.total_amount;
+                const numericAmount = amount ? parseFloat(amount) || 0 : 0;
+                return sum + numericAmount;
+              },
               0
             );
             const completedCount = supplierOrders.filter(

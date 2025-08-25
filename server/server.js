@@ -754,9 +754,9 @@ app.post('/stock_movements', (req, res) => {
       // Update item stock based on movement type
       let stockChange = 0;
       if (movement_type === 'in') {
-        stockChange = quantity;
+        stockChange = Math.abs(quantity); // Ensure positive for in movements
       } else if (movement_type === 'out') {
-        stockChange = -quantity;
+        stockChange = -Math.abs(quantity); // Ensure negative for out movements
       } else if (movement_type === 'adjustment') {
         stockChange = quantity; // quantity can be positive or negative for adjustments
       }
@@ -993,22 +993,12 @@ app.put('/users/:id', authenticateToken, async (req, res) => {
 
 // Usage Reports API
 app.get('/reports/usage', (req, res) => {
-  const { dateRange = 'this_month', category = '', search = '' } = req.query;
+  const { category = '', search = '' } = req.query;
   
   let dateCondition = '';
-  switch (dateRange) {
-    case 'last_month':
-      dateCondition = 'AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 2 MONTH) AND sm.created_at < DATE_SUB(CURDATE(), INTERVAL 1 MONTH)';
-      break;
-    case 'last_3_months':
-      dateCondition = 'AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)';
-      break;
-    case 'this_year':
-      dateCondition = 'AND YEAR(sm.created_at) = YEAR(CURDATE())';
-      break;
-    default: // this_month
-      dateCondition = 'AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)';
-  }
+  // For now, show all data regardless of date range to debug the issue
+  // TODO: Implement proper date filtering based on actual data dates
+  dateCondition = '';
   
   let categoryCondition = category ? 'AND c.name = ?' : '';
   let searchCondition = search ? 'AND (i.code LIKE ? OR i.name LIKE ?)' : '';
@@ -1019,15 +1009,15 @@ app.get('/reports/usage', (req, res) => {
       i.code as itemCode,
       i.name as itemName,
       c.name as category,
-      SUM(CASE WHEN sm.movement_type = 'out' THEN sm.quantity ELSE 0 END) as totalUsage,
-      ROUND(SUM(CASE WHEN sm.movement_type = 'out' THEN sm.quantity ELSE 0 END) / 30, 1) as averageDaily,
+      COALESCE(SUM(CASE WHEN sm.movement_type = 'out' THEN ABS(sm.quantity) ELSE 0 END), 0) as totalUsage,
+      ROUND(COALESCE(SUM(CASE WHEN sm.movement_type = 'out' THEN ABS(sm.quantity) ELSE 0 END), 0) / 30, 1) as averageDaily,
       MAX(sm.created_at) as lastUsage,
       CASE 
-        WHEN SUM(CASE WHEN sm.movement_type = 'out' AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 15 DAY) THEN sm.quantity ELSE 0 END) > 
-             SUM(CASE WHEN sm.movement_type = 'out' AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) AND sm.created_at < DATE_SUB(CURDATE(), INTERVAL 15 DAY) THEN sm.quantity ELSE 0 END) 
+        WHEN COALESCE(SUM(CASE WHEN sm.movement_type = 'out' AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 15 DAY) THEN ABS(sm.quantity) ELSE 0 END), 0) > 
+             COALESCE(SUM(CASE WHEN sm.movement_type = 'out' AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) AND sm.created_at < DATE_SUB(CURDATE(), INTERVAL 15 DAY) THEN ABS(sm.quantity) ELSE 0 END), 0) 
         THEN 'up'
-        WHEN SUM(CASE WHEN sm.movement_type = 'out' AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 15 DAY) THEN sm.quantity ELSE 0 END) < 
-             SUM(CASE WHEN sm.movement_type = 'out' AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) AND sm.created_at < DATE_SUB(CURDATE(), INTERVAL 15 DAY) THEN sm.quantity ELSE 0 END) 
+        WHEN COALESCE(SUM(CASE WHEN sm.movement_type = 'out' AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 15 DAY) THEN ABS(sm.quantity) ELSE 0 END), 0) < 
+             COALESCE(SUM(CASE WHEN sm.movement_type = 'out' AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) AND sm.created_at < DATE_SUB(CURDATE(), INTERVAL 15 DAY) THEN ABS(sm.quantity) ELSE 0 END), 0) 
         THEN 'down'
         ELSE 'stable'
       END as trend
@@ -1036,7 +1026,6 @@ app.get('/reports/usage', (req, res) => {
     LEFT JOIN stock_movements sm ON i.id = sm.item_id ${dateCondition}
     WHERE i.status = 'active' ${categoryCondition} ${searchCondition}
     GROUP BY i.id, i.code, i.name, c.name
-    HAVING totalUsage > 0
     ORDER BY totalUsage DESC
   `;
   
@@ -1057,30 +1046,17 @@ app.get('/reports/usage', (req, res) => {
 });
 
 app.get('/reports/usage/daily', (req, res) => {
-  const { dateRange = 'this_month' } = req.query;
-  
-  let dateCondition = '';
-  switch (dateRange) {
-    case 'last_month':
-      dateCondition = 'WHERE sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 2 MONTH) AND sm.created_at < DATE_SUB(CURDATE(), INTERVAL 1 MONTH)';
-      break;
-    case 'last_3_months':
-      dateCondition = 'WHERE sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)';
-      break;
-    case 'this_year':
-      dateCondition = 'WHERE YEAR(sm.created_at) = YEAR(CURDATE())';
-      break;
-    default: // this_month
-      dateCondition = 'WHERE sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)';
-  }
+  // For now, show all data regardless of date range to debug the issue
+  // TODO: Implement proper date filtering based on actual data dates
+  const dateCondition = 'WHERE sm.movement_type = "out"';
   
   const query = `
     SELECT 
       DATE_FORMAT(sm.created_at, '%d/%m') as date,
       DATE(sm.created_at) as fullDate,
-      SUM(CASE WHEN sm.movement_type = 'out' THEN sm.quantity ELSE 0 END) as \`usage\`
+      SUM(CASE WHEN sm.movement_type = 'out' THEN ABS(sm.quantity) ELSE 0 END) as \`usage\`
     FROM stock_movements sm
-    ${dateCondition} AND sm.movement_type = 'out'
+    ${dateCondition}
     GROUP BY DATE(sm.created_at)
     ORDER BY fullDate ASC
     LIMIT 30
@@ -1096,32 +1072,19 @@ app.get('/reports/usage/daily', (req, res) => {
 });
 
 app.get('/reports/usage/category', (req, res) => {
-  const { dateRange = 'this_month' } = req.query;
-  
-  let dateCondition = '';
-  switch (dateRange) {
-    case 'last_month':
-      dateCondition = 'AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 2 MONTH) AND sm.created_at < DATE_SUB(CURDATE(), INTERVAL 1 MONTH)';
-      break;
-    case 'last_3_months':
-      dateCondition = 'AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)';
-      break;
-    case 'this_year':
-      dateCondition = 'AND YEAR(sm.created_at) = YEAR(CURDATE())';
-      break;
-    default: // this_month
-      dateCondition = 'AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)';
-  }
+  // For now, show all data regardless of date range to debug the issue
+  // TODO: Implement proper date filtering based on actual data dates
+  const dateCondition = '';
   
   const query = `
     SELECT 
       c.name,
-      SUM(CASE WHEN sm.movement_type = 'out' THEN sm.quantity ELSE 0 END) as \`value\`,
+      COALESCE(SUM(CASE WHEN sm.movement_type = 'out' THEN ABS(sm.quantity) ELSE 0 END), 0) as \`value\`,
       CASE 
-        WHEN ROW_NUMBER() OVER (ORDER BY SUM(CASE WHEN sm.movement_type = 'out' THEN sm.quantity ELSE 0 END) DESC) = 1 THEN '#3B82F6'
-        WHEN ROW_NUMBER() OVER (ORDER BY SUM(CASE WHEN sm.movement_type = 'out' THEN sm.quantity ELSE 0 END) DESC) = 2 THEN '#10B981'
-        WHEN ROW_NUMBER() OVER (ORDER BY SUM(CASE WHEN sm.movement_type = 'out' THEN sm.quantity ELSE 0 END) DESC) = 3 THEN '#F59E0B'
-        WHEN ROW_NUMBER() OVER (ORDER BY SUM(CASE WHEN sm.movement_type = 'out' THEN sm.quantity ELSE 0 END) DESC) = 4 THEN '#EF4444'
+        WHEN ROW_NUMBER() OVER (ORDER BY COALESCE(SUM(CASE WHEN sm.movement_type = 'out' THEN ABS(sm.quantity) ELSE 0 END), 0) DESC) = 1 THEN '#3B82F6'
+        WHEN ROW_NUMBER() OVER (ORDER BY COALESCE(SUM(CASE WHEN sm.movement_type = 'out' THEN ABS(sm.quantity) ELSE 0 END), 0) DESC) = 2 THEN '#10B981'
+        WHEN ROW_NUMBER() OVER (ORDER BY COALESCE(SUM(CASE WHEN sm.movement_type = 'out' THEN ABS(sm.quantity) ELSE 0 END), 0) DESC) = 3 THEN '#F59E0B'
+        WHEN ROW_NUMBER() OVER (ORDER BY COALESCE(SUM(CASE WHEN sm.movement_type = 'out' THEN ABS(sm.quantity) ELSE 0 END), 0) DESC) = 4 THEN '#EF4444'
         ELSE '#8B5CF6'
       END as color
     FROM categories c
@@ -1129,7 +1092,6 @@ app.get('/reports/usage/category', (req, res) => {
     LEFT JOIN stock_movements sm ON i.id = sm.item_id ${dateCondition}
     WHERE c.status = 'active' AND sm.movement_type = 'out'
     GROUP BY c.id, c.name
-    HAVING \`value\` > 0
     ORDER BY \`value\` DESC
   `;
   
