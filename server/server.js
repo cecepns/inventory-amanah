@@ -742,40 +742,80 @@ app.get('/stock_movements', (req, res) => {
 app.post('/stock_movements', (req, res) => {
   const { item_id, movement_type, quantity, reference_type, reference_id, notes, created_by } = req.body;
   
-  db.query(
-    'INSERT INTO stock_movements (item_id, movement_type, quantity, reference_type, reference_id, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [item_id, movement_type, quantity, reference_type, reference_id, notes, created_by],
-    (err, results) => {
+  // For outbound movements, check if stock is sufficient
+  if (movement_type === 'out') {
+    const requestedQuantity = Math.abs(quantity);
+    
+    // First check current stock
+    db.query('SELECT current_stock, name FROM items WHERE id = ?', [item_id], (err, stockResults) => {
       if (err) {
         res.status(500).json({ error: err.message });
         return;
       }
       
-      // Update item stock based on movement type
-      let stockChange = 0;
-      if (movement_type === 'in') {
-        stockChange = Math.abs(quantity); // Ensure positive for in movements
-      } else if (movement_type === 'out') {
-        stockChange = -Math.abs(quantity); // Ensure negative for out movements
-      } else if (movement_type === 'adjustment') {
-        stockChange = quantity; // quantity can be positive or negative for adjustments
+      if (stockResults.length === 0) {
+        res.status(404).json({ error: 'Item tidak ditemukan' });
+        return;
       }
       
-      if (stockChange !== 0) {
-        db.query(
-          'UPDATE items SET current_stock = current_stock + ? WHERE id = ?',
-          [stockChange, item_id],
-          (err2) => {
-            if (err2) {
-              console.error('Error updating stock:', err2);
+      const currentStock = stockResults[0].current_stock;
+      const itemName = stockResults[0].name;
+      
+      if (currentStock < requestedQuantity) {
+        res.status(400).json({ 
+          error: 'Maaf, stok tidak mencukupi', 
+          message: `Stok saat ini: ${currentStock}, diminta: ${requestedQuantity}`,
+          current_stock: currentStock,
+          requested_quantity: requestedQuantity,
+          item_name: itemName
+        });
+        return;
+      }
+      
+      // Stock is sufficient, proceed with the movement
+      createStockMovement();
+    });
+  } else {
+    // For 'in' and 'adjustment' movements, proceed directly
+    createStockMovement();
+  }
+  
+  function createStockMovement() {
+    db.query(
+      'INSERT INTO stock_movements (item_id, movement_type, quantity, reference_type, reference_id, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [item_id, movement_type, quantity, reference_type, reference_id, notes, created_by],
+      (err, results) => {
+        if (err) {
+          res.status(500).json({ error: err.message });
+          return;
+        }
+        
+        // Update item stock based on movement type
+        let stockChange = 0;
+        if (movement_type === 'in') {
+          stockChange = Math.abs(quantity); // Ensure positive for in movements
+        } else if (movement_type === 'out') {
+          stockChange = -Math.abs(quantity); // Ensure negative for out movements
+        } else if (movement_type === 'adjustment') {
+          stockChange = quantity; // quantity can be positive or negative for adjustments
+        }
+        
+        if (stockChange !== 0) {
+          db.query(
+            'UPDATE items SET current_stock = current_stock + ? WHERE id = ?',
+            [stockChange, item_id],
+            (err2) => {
+              if (err2) {
+                console.error('Error updating stock:', err2);
+              }
             }
-          }
-        );
+          );
+        }
+        
+        res.json({ id: results.insertId, item_id, movement_type, quantity, reference_type, reference_id, notes, created_by });
       }
-      
-      res.json({ id: results.insertId, item_id, movement_type, quantity, reference_type, reference_id, notes, created_by });
-    }
-  );
+    );
+  }
 });
 
 // Authentication middleware

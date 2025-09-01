@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { HiPlus, HiArrowUp, HiArrowDown, HiAdjustments, HiSearch } from 'react-icons/hi';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -19,12 +19,14 @@ const StockMovements = () => {
     reference_id: null,
     notes: ''
   });
+  const [selectedItemStock, setSelectedItemStock] = useState(null);
+  const [validationError, setValidationError] = useState('');
 
   // API URL base
   const API_BASE = 'https://api-inventory.isavralabel.com/api/inventory-amanah';
 
   // Fetch stock movements from API
-  const fetchStockMovements = async () => {
+  const fetchStockMovements = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`${API_BASE}/stock_movements`, {
@@ -46,10 +48,10 @@ const StockMovements = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
 
   // Fetch items for form dropdown
-  const fetchItems = async () => {
+  const fetchItems = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE}/items`, {
         headers: {
@@ -67,11 +69,40 @@ const StockMovements = () => {
     } catch (err) {
       console.error('Error fetching items:', err);
     }
+  }, [token]);
+
+  // Fetch current stock for selected item
+  const fetchItemStock = async (itemId) => {
+    if (!itemId) {
+      setSelectedItemStock(null);
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API_BASE}/items/${itemId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch item details');
+      }
+      
+      const itemData = await response.json();
+      setSelectedItemStock(itemData.current_stock);
+    } catch (err) {
+      console.error('Error fetching item stock:', err);
+      setSelectedItemStock(null);
+    }
   };
 
   // Create stock movement
   const createStockMovement = async (movementData) => {
     try {
+      setValidationError(''); // Clear previous validation errors
+      
       const response = await fetch(`${API_BASE}/stock_movements`, {
         method: 'POST',
         headers: {
@@ -85,7 +116,15 @@ const StockMovements = () => {
       });
       
       if (!response.ok) {
-        throw new Error('Failed to create stock movement');
+        const errorData = await response.json();
+        
+        // Handle stock validation error specifically
+        if (response.status === 400 && errorData.error === 'Maaf, stok tidak mencukupi') {
+          setValidationError(`${errorData.error}. ${errorData.message}`);
+          return;
+        }
+        
+        throw new Error(errorData.error || 'Failed to create stock movement');
       }
       
       await fetchStockMovements();
@@ -108,6 +147,8 @@ const StockMovements = () => {
       reference_id: null,
       notes: ''
     });
+    setSelectedItemStock(null);
+    setValidationError('');
   };
 
   const handleSubmit = async (e) => {
@@ -128,7 +169,7 @@ const StockMovements = () => {
       fetchStockMovements();
       fetchItems();
     }
-  }, [token]);
+  }, [token, fetchStockMovements, fetchItems]);
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('id-ID', {
@@ -283,7 +324,12 @@ const StockMovements = () => {
                 <select
                   className="input-field w-full"
                   value={formData.item_id}
-                  onChange={(e) => setFormData({...formData, item_id: e.target.value})}
+                  onChange={(e) => {
+                    const itemId = e.target.value;
+                    setFormData({...formData, item_id: itemId});
+                    fetchItemStock(itemId);
+                    setValidationError(''); // Clear validation error when changing item
+                  }}
                   required
                 >
                   <option value="">Pilih Barang</option>
@@ -293,6 +339,11 @@ const StockMovements = () => {
                     </option>
                   ))}
                 </select>
+                {selectedItemStock !== null && (
+                  <div className="mt-1 text-sm text-gray-600">
+                    Stok saat ini: <span className="font-semibold text-blue-600">{selectedItemStock}</span>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -301,7 +352,10 @@ const StockMovements = () => {
                 <select
                   className="input-field w-full"
                   value={formData.movement_type}
-                  onChange={(e) => setFormData({...formData, movement_type: e.target.value})}
+                  onChange={(e) => {
+                    setFormData({...formData, movement_type: e.target.value});
+                    setValidationError(''); // Clear validation error when changing movement type
+                  }}
                   required
                 >
                   <option value="in">Masuk</option>
@@ -317,10 +371,18 @@ const StockMovements = () => {
                   type="number"
                   className="input-field w-full"
                   value={formData.quantity}
-                  onChange={(e) => setFormData({...formData, quantity: e.target.value})}
+                  onChange={(e) => {
+                    setFormData({...formData, quantity: e.target.value});
+                    setValidationError(''); // Clear validation error when changing quantity
+                  }}
                   required
                   min={formData.movement_type === 'adjustment' ? undefined : "1"}
                 />
+                {formData.movement_type === 'out' && selectedItemStock !== null && (
+                  <div className="mt-1 text-xs text-gray-500">
+                    Stok yang tersedia: {selectedItemStock}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -349,6 +411,28 @@ const StockMovements = () => {
                   placeholder="Masukkan catatan pergerakan..."
                 />
               </div>
+              
+              {/* Validation Error Display */}
+              {validationError && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-red-800">
+                        Transaksi Tidak Dapat Diproses
+                      </h3>
+                      <div className="mt-2 text-sm text-red-700">
+                        {validationError}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <div className="flex gap-2">
                 <button type="submit" className="btn-primary flex-1">
                   Simpan
