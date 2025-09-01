@@ -993,12 +993,25 @@ app.put('/users/:id', authenticateToken, async (req, res) => {
 
 // Usage Reports API
 app.get('/reports/usage', (req, res) => {
-  const { category = '', search = '' } = req.query;
+  const { category = '', search = '', dateRange = 'this_month' } = req.query;
   
   let dateCondition = '';
-  // For now, show all data regardless of date range to debug the issue
-  // TODO: Implement proper date filtering based on actual data dates
-  dateCondition = '';
+  switch (dateRange) {
+    case 'last_month':
+      dateCondition = 'AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 2 MONTH) AND sm.created_at < DATE_SUB(CURDATE(), INTERVAL 1 MONTH)';
+      break;
+    case 'last_3_months':
+      dateCondition = 'AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)';
+      break;
+    case 'this_year':
+      dateCondition = 'AND YEAR(sm.created_at) = YEAR(CURDATE())';
+      break;
+    case 'last_year':
+      dateCondition = 'AND YEAR(sm.created_at) = YEAR(CURDATE()) - 1';
+      break;
+    default: // this_month
+      dateCondition = 'AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)';
+  }
   
   let categoryCondition = category ? 'AND c.name = ?' : '';
   let searchCondition = search ? 'AND (i.code LIKE ? OR i.name LIKE ?)' : '';
@@ -1046,9 +1059,25 @@ app.get('/reports/usage', (req, res) => {
 });
 
 app.get('/reports/usage/daily', (req, res) => {
-  // For now, show all data regardless of date range to debug the issue
-  // TODO: Implement proper date filtering based on actual data dates
-  const dateCondition = 'WHERE sm.movement_type = "out"';
+  const { dateRange = 'this_month' } = req.query;
+  
+  let dateCondition = 'WHERE sm.movement_type = "out"';
+  switch (dateRange) {
+    case 'last_month':
+      dateCondition += ' AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 2 MONTH) AND sm.created_at < DATE_SUB(CURDATE(), INTERVAL 1 MONTH)';
+      break;
+    case 'last_3_months':
+      dateCondition += ' AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)';
+      break;
+    case 'this_year':
+      dateCondition += ' AND YEAR(sm.created_at) = YEAR(CURDATE())';
+      break;
+    case 'last_year':
+      dateCondition += ' AND YEAR(sm.created_at) = YEAR(CURDATE()) - 1';
+      break;
+    default: // this_month
+      dateCondition += ' AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)';
+  }
   
   const query = `
     SELECT 
@@ -1072,9 +1101,25 @@ app.get('/reports/usage/daily', (req, res) => {
 });
 
 app.get('/reports/usage/category', (req, res) => {
-  // For now, show all data regardless of date range to debug the issue
-  // TODO: Implement proper date filtering based on actual data dates
-  const dateCondition = '';
+  const { dateRange = 'this_month' } = req.query;
+  
+  let dateCondition = '';
+  switch (dateRange) {
+    case 'last_month':
+      dateCondition = 'AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 2 MONTH) AND sm.created_at < DATE_SUB(CURDATE(), INTERVAL 1 MONTH)';
+      break;
+    case 'last_3_months':
+      dateCondition = 'AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)';
+      break;
+    case 'this_year':
+      dateCondition = 'AND YEAR(sm.created_at) = YEAR(CURDATE())';
+      break;
+    case 'last_year':
+      dateCondition = 'AND YEAR(sm.created_at) = YEAR(CURDATE()) - 1';
+      break;
+    default: // this_month
+      dateCondition = 'AND sm.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)';
+  }
   
   const query = `
     SELECT 
@@ -1503,6 +1548,76 @@ app.put('/settings/:key', authenticateToken, (req, res) => {
       res.json({ message: 'Setting updated successfully' });
     }
   );
+});
+
+// Backup API - Download database backup
+app.get('/backup/download', authenticateToken, (req, res) => {
+  // Only allow owner to download backup
+  if (req.user.role !== 'owner') {
+    return res.status(403).json({ error: 'Only owner can download backup' });
+  }
+  
+  const { exec } = require('child_process');
+  const fs = require('fs');
+  const path = require('path');
+  
+  // Generate filename with timestamp
+  const now = new Date();
+  const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
+  const filename = `inventory-backup-${timestamp}.sql`;
+  const tempPath = path.join(__dirname, 'temp', filename);
+  
+  // Ensure temp directory exists
+  const tempDir = path.dirname(tempPath);
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+  
+  // Get database config from connection
+  const dbConfig = {
+    host: 'localhost',
+    user: 'root',
+    password: '',
+    database: 'inventory_system'
+  };
+  
+  // Create mysqldump command
+  const mysqldumpCmd = `mysqldump -h ${dbConfig.host} -u ${dbConfig.user} ${dbConfig.password ? `-p${dbConfig.password}` : ''} ${dbConfig.database} > "${tempPath}"`;
+  
+  // Execute mysqldump
+  exec(mysqldumpCmd, (error, stdout, stderr) => {
+    if (error) {
+      console.error('Backup error:', error);
+      return res.status(500).json({ error: 'Failed to create backup' });
+    }
+    
+    // Check if file was created
+    if (!fs.existsSync(tempPath)) {
+      return res.status(500).json({ error: 'Backup file not created' });
+    }
+    
+    // Set response headers for file download
+    res.setHeader('Content-Type', 'application/sql');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    
+    // Stream the file
+    const fileStream = fs.createReadStream(tempPath);
+    fileStream.pipe(res);
+    
+    // Clean up temp file after download
+    fileStream.on('end', () => {
+      fs.unlink(tempPath, (unlinkError) => {
+        if (unlinkError) {
+          console.error('Error deleting temp file:', unlinkError);
+        }
+      });
+    });
+    
+    fileStream.on('error', (streamError) => {
+      console.error('Stream error:', streamError);
+      res.status(500).json({ error: 'Error streaming backup file' });
+    });
+  });
 });
 
 // Start server

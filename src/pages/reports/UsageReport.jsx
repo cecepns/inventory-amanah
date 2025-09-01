@@ -255,6 +255,7 @@ const UsageReport = () => {
               <option value="last_month">Bulan Lalu</option>
               <option value="last_3_months">3 Bulan Terakhir</option>
               <option value="this_year">Tahun Ini</option>
+              <option value="last_year">Tahun Lalu</option>
             </select>
           </div>
         </div>

@@ -25,59 +25,85 @@ const Layout = ({ children }) => {
   const location = useLocation();
   const { user, logout } = useAuth();
 
-  const menuItems = [
-    {
-      title: 'Dashboard',
-      icon: HiHome,
-      path: '/dashboard'
-    },
-    {
-      title: 'Data Master',
-      icon: HiCollection,
-      submenu: [
-        { title: 'Barang', path: '/master/items' },
-        { title: 'Kategori Barang', path: '/master/categories' },
-        { title: 'Supplier', path: '/master/suppliers' },
-        { title: 'Satuan', path: '/master/units' }
-      ]
-    },
-    {
-      title: 'EOQ & JIT',
-      icon: HiCalculator,
-      submenu: [
-        { title: 'Perhitungan EOQ', path: '/calculations/eoq' },
-        { title: 'Perhitungan JIT', path: '/calculations/jit' }
-      ]
-    },
-    {
-      title: 'Transaksi',
-      icon: HiDocumentText,
-      submenu: [
-        { title: 'Pemesanan Barang', path: '/transactions/purchase-orders' },
-        { title: 'Penerimaan Barang', path: '/transactions/receipts' },
-        { title: 'Pengeluaran Barang', path: '/transactions/stock-movements' }
-      ]
-    },
-    {
-      title: 'Laporan',
-      icon: HiClipboardList,
-      submenu: [
-        { title: 'Laporan Stok', path: '/reports/stock' },
-        { title: 'Laporan Pembelian', path: '/reports/purchase' },
-        { title: 'Laporan Pemakaian', path: '/reports/usage' }
-      ]
-    },
-    {
-      title: 'Pengguna',
-      icon: HiUsers,
-      path: '/users'
-    },
-    {
-      title: 'Pengaturan',
-      icon: HiCog,
-      path: '/settings'
-    }
-  ];
+  // Define menu items based on user role
+  const getMenuItems = () => {
+    const allMenuItems = [
+      {
+        title: 'Dashboard',
+        icon: HiHome,
+        path: '/dashboard',
+        roles: ['owner', 'admin'] // Both owner and admin can access
+      },
+      {
+        title: 'Data Master',
+        icon: HiCollection,
+        roles: ['owner', 'admin'],
+        submenu: [
+          { title: 'Barang', path: '/master/items' },
+          { title: 'Kategori Barang', path: '/master/categories' },
+          { title: 'Supplier', path: '/master/suppliers', roles: ['owner'] }, // Only owner
+          { title: 'Satuan', path: '/master/units' }
+        ]
+      },
+      {
+        title: 'EOQ & JIT',
+        icon: HiCalculator,
+        roles: ['owner', 'admin'],
+        submenu: [
+          { title: 'Perhitungan EOQ', path: '/calculations/eoq' },
+          { title: 'Perhitungan JIT', path: '/calculations/jit' }
+        ]
+      },
+      {
+        title: 'Transaksi',
+        icon: HiDocumentText,
+        roles: ['owner', 'admin'],
+        submenu: [
+          { title: 'Pemesanan Barang', path: '/transactions/purchase-orders' },
+          { title: 'Penerimaan Barang', path: '/transactions/receipts' },
+          { title: 'Pengeluaran Barang', path: '/transactions/stock-movements' }
+        ]
+      },
+      {
+        title: 'Laporan',
+        icon: HiClipboardList,
+        roles: ['owner', 'admin'],
+        submenu: [
+          { title: 'Laporan Stok', path: '/reports/stock' },
+          { title: 'Laporan Pembelian', path: '/reports/purchase' },
+          { title: 'Laporan Pemakaian', path: '/reports/usage' }
+        ]
+      },
+      {
+        title: 'Pengguna',
+        icon: HiUsers,
+        path: '/users',
+        roles: ['owner'] // Only owner can manage users
+      },
+      {
+        title: 'Pengaturan',
+        icon: HiCog,
+        path: '/settings',
+        roles: ['owner'] // Only owner can access settings
+      }
+    ];
+
+    // Filter menu items based on user role
+    return allMenuItems.filter(item => {
+      if (!item.roles || item.roles.includes(user?.role)) {
+        // If item has submenu, filter submenu items by role
+        if (item.submenu) {
+          item.submenu = item.submenu.filter(subItem => {
+            return !subItem.roles || subItem.roles.includes(user?.role);
+          });
+        }
+        return true;
+      }
+      return false;
+    });
+  };
+
+  const menuItems = getMenuItems();
 
   const isActivePath = (path) => {
     return location.pathname === path;

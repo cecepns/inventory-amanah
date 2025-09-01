@@ -28,10 +28,7 @@ const Settings = () => {
     reorderNotification: true,
     emailNotifications: true,
     
-    // Backup Settings
-    backupSchedule: 'daily',
-    backupPath: '/backup/inventory',
-    autoBackup: true
+    // Note: Backup settings removed - now using direct download
   });
 
   // Load settings from API on component mount
@@ -119,22 +116,61 @@ const Settings = () => {
     }
   };
 
-  const handleManualBackup = async () => {
+  const handleDownloadBackup = async () => {
     setSaving(true);
     setError('');
     setSuccessMessage('');
     
     try {
-      // Simulate backup process
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      setSuccessMessage('Backup berhasil dibuat! Data telah disimpan.');
+      // Get auth token from localStorage
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        throw new Error('Token autentikasi tidak ditemukan. Silakan login kembali.');
+      }
+      
+      const response = await fetch('https://api-inventory.isavralabel.com/api/inventory-amanah/backup/download', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to download backup');
+      }
+      
+      // Get the blob data
+      const blob = await response.blob();
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Generate filename with current date
+      const now = new Date();
+      const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
+      link.download = `inventory-backup-${timestamp}.sql`;
+      
+      // Trigger download
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Clean up
+      window.URL.revokeObjectURL(url);
+      
+      setSuccessMessage('Backup berhasil didownload!');
       
       setTimeout(() => {
         setSuccessMessage('');
       }, 3000);
       
     } catch (err) {
-      setError('Gagal membuat backup: ' + err.message);
+      console.error('Error downloading backup:', err);
+      setError('Gagal mendownload backup: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -188,7 +224,7 @@ const Settings = () => {
     { id: 'general', name: 'Umum', icon: HiCog },
     { id: 'calculations', name: 'Perhitungan', icon: HiCalculator },
     { id: 'notifications', name: 'Notifikasi', icon: HiBell },
-    { id: 'backup', name: 'Backup', icon: HiDatabase }
+    { id: 'backup', name: 'Download Backup', icon: HiDatabase }
   ];
 
   return (
@@ -478,76 +514,58 @@ const Settings = () => {
             {activeTab === 'backup' && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Pengaturan Backup</h3>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Download Backup Database</h3>
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <label className="text-sm font-medium text-gray-900">Auto Backup</label>
-                        <p className="text-sm text-gray-500">Backup otomatis sesuai jadwal yang ditentukan</p>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex">
+                        <div className="ml-3">
+                          <h3 className="text-sm font-medium text-blue-800">
+                            Informasi Backup
+                          </h3>
+                          <div className="mt-2 text-sm text-blue-700">
+                            <p>Download file SQL berisi seluruh data sistem inventory.</p>
+                            <p>File backup dapat digunakan untuk restore database di masa mendatang.</p>
+                          </div>
+                        </div>
                       </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={settings.autoBackup}
-                          onChange={(e) => handleSettingChange('autoBackup', e.target.checked)}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                      </label>
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Jadwal Backup
-                      </label>
-                      <select
-                        value={settings.backupSchedule}
-                        onChange={(e) => handleSettingChange('backupSchedule', e.target.value)}
-                        disabled={loading || saving}
-                        className="input-field w-full max-w-xs disabled:bg-gray-100 disabled:cursor-not-allowed"
-                      >
-                        <option value="daily">Harian</option>
-                        <option value="weekly">Mingguan</option>
-                        <option value="monthly">Bulanan</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Lokasi Backup
-                      </label>
-                      <input
-                        type="text"
-                        value={settings.backupPath}
-                        onChange={(e) => handleSettingChange('backupPath', e.target.value)}
-                        disabled={loading || saving}
-                        className="input-field w-full disabled:bg-gray-100 disabled:cursor-not-allowed"
-                      />
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <div className="flex">
+                        <div className="ml-3">
+                          <h3 className="text-sm font-medium text-green-800">
+                            Download Backup Database
+                          </h3>
+                          <div className="mt-2 text-sm text-green-700">
+                            <p>Klik tombol di bawah untuk mendownload file backup database (SQL).</p>
+                            <p>Pastikan menyimpan file di lokasi yang aman.</p>
+                          </div>
+                          <div className="mt-4">
+                            <button 
+                              onClick={handleDownloadBackup}
+                              disabled={saving}
+                              className="btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                            >
+                              <HiDatabase className="h-4 w-4 mr-2" />
+                              {saving ? 'Memproses...' : 'Download Backup SQL'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                       <div className="flex">
                         <div className="ml-3">
                           <h3 className="text-sm font-medium text-yellow-800">
-                            Backup Manual
+                            Catatan Penting
                           </h3>
                           <div className="mt-2 text-sm text-yellow-700">
-                            <p>Backup terakhir: {new Date().toLocaleDateString('id-ID', { 
-                              day: 'numeric', 
-                              month: 'long', 
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })} WIB</p>
-                          </div>
-                          <div className="mt-4">
-                            <button 
-                              onClick={handleManualBackup}
-                              disabled={saving}
-                              className="btn-accent text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {saving ? 'Processing...' : 'Backup Sekarang'}
-                            </button>
+                            <ul className="list-disc list-inside space-y-1">
+                              <li>File backup berisi data sensitif, simpan dengan aman</li>
+                              <li>Lakukan backup secara berkala untuk mencegah kehilangan data</li>
+                              <li>File dapat digunakan untuk restore database menggunakan tools MySQL</li>
+                            </ul>
                           </div>
                         </div>
                       </div>
