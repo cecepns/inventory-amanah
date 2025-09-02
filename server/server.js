@@ -742,41 +742,98 @@ app.get('/stock_movements', (req, res) => {
 app.post('/stock_movements', (req, res) => {
   const { item_id, movement_type, quantity, reference_type, reference_id, notes, created_by } = req.body;
   
-  // For outbound movements, check if stock is sufficient
+  // For outbound movements, use atomic transaction to prevent race conditions
   if (movement_type === 'out') {
     const requestedQuantity = Math.abs(quantity);
     
-    // First check current stock
-    db.query('SELECT current_stock, name FROM items WHERE id = ?', [item_id], (err, stockResults) => {
+    // Begin transaction for atomic stock validation and update
+    db.beginTransaction((err) => {
       if (err) {
-        res.status(500).json({ error: err.message });
-        return;
+        return res.status(500).json({ error: 'Transaction failed: ' + err.message });
       }
       
-      if (stockResults.length === 0) {
-        res.status(404).json({ error: 'Item tidak ditemukan' });
-        return;
-      }
-      
-      const currentStock = stockResults[0].current_stock;
-      const itemName = stockResults[0].name;
-      
-      if (currentStock < requestedQuantity) {
-        res.status(400).json({ 
-          error: 'Maaf, stok tidak mencukupi', 
-          message: `Stok saat ini: ${currentStock}, diminta: ${requestedQuantity}`,
-          current_stock: currentStock,
-          requested_quantity: requestedQuantity,
-          item_name: itemName
-        });
-        return;
-      }
-      
-      // Stock is sufficient, proceed with the movement
-      createStockMovement();
+      // Lock the item row and check current stock in same query
+      db.query('SELECT current_stock, name FROM items WHERE id = ? FOR UPDATE', [item_id], (err, stockResults) => {
+        if (err) {
+          return db.rollback(() => {
+            res.status(500).json({ error: err.message });
+          });
+        }
+        
+        if (stockResults.length === 0) {
+          return db.rollback(() => {
+            res.status(404).json({ error: 'Item tidak ditemukan' });
+          });
+        }
+        
+        const currentStock = stockResults[0].current_stock;
+        const itemName = stockResults[0].name;
+        
+        if (currentStock < requestedQuantity) {
+          return db.rollback(() => {
+            res.status(400).json({ 
+              error: 'Maaf, stok tidak mencukupi', 
+              message: `Stok saat ini: ${currentStock}, diminta: ${requestedQuantity}`,
+              current_stock: currentStock,
+              requested_quantity: requestedQuantity,
+              item_name: itemName
+            });
+          });
+        }
+        
+        // Stock is sufficient, atomically update stock and create movement
+        const stockChange = -requestedQuantity;
+        
+        // Update stock first
+        db.query(
+          'UPDATE items SET current_stock = current_stock + ? WHERE id = ?',
+          [stockChange, item_id],
+          (err2) => {
+            if (err2) {
+              return db.rollback(() => {
+                res.status(500).json({ error: 'Error updating stock: ' + err2.message });
+              });
+            }
+            
+            // Then create stock movement record
+            db.query(
+              'INSERT INTO stock_movements (item_id, movement_type, quantity, reference_type, reference_id, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+              [item_id, movement_type, quantity, reference_type, reference_id, notes, created_by],
+              (err3, results) => {
+                if (err3) {
+                  return db.rollback(() => {
+                    res.status(500).json({ error: 'Error creating stock movement: ' + err3.message });
+                  });
+                }
+                
+                // Commit transaction
+                db.commit((err4) => {
+                  if (err4) {
+                    return db.rollback(() => {
+                      res.status(500).json({ error: 'Error committing transaction: ' + err4.message });
+                    });
+                  }
+                  
+                  res.json({ 
+                    id: results.insertId, 
+                    item_id, 
+                    movement_type, 
+                    quantity, 
+                    reference_type, 
+                    reference_id, 
+                    notes, 
+                    created_by,
+                    message: 'Pergerakan stok berhasil dicatat'
+                  });
+                });
+              }
+            );
+          }
+        );
+      });
     });
   } else {
-    // For 'in' and 'adjustment' movements, proceed directly
+    // For 'in' and 'adjustment' movements, proceed with standard logic
     createStockMovement();
   }
   
@@ -794,8 +851,6 @@ app.post('/stock_movements', (req, res) => {
         let stockChange = 0;
         if (movement_type === 'in') {
           stockChange = Math.abs(quantity); // Ensure positive for in movements
-        } else if (movement_type === 'out') {
-          stockChange = -Math.abs(quantity); // Ensure negative for out movements
         } else if (movement_type === 'adjustment') {
           stockChange = quantity; // quantity can be positive or negative for adjustments
         }
@@ -1625,7 +1680,7 @@ app.get('/backup/download', authenticateToken, (req, res) => {
   const mysqldumpCmd = `mysqldump -h ${dbConfig.host} -u ${dbConfig.user} ${dbConfig.password ? `-p${dbConfig.password}` : ''} ${dbConfig.database} > "${tempPath}"`;
   
   // Execute mysqldump
-  exec(mysqldumpCmd, (error, stdout, stderr) => {
+  exec(mysqldumpCmd, (error) => {
     if (error) {
       console.error('Backup error:', error);
       return res.status(500).json({ error: 'Failed to create backup' });
